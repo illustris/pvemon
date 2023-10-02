@@ -121,61 +121,66 @@ def read_interface_stats(ifname):
     return stats
 
 def collect_kvm_metrics():
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cpu_percent', 'memory_percent', 'num_threads']):
+    procs = [
+        (
+            # proc object
+            proc,
+            # cmdline list
+            proc.cmdline(),
+            # VMID
+            flag_to_label_value(proc.cmdline(),"-id")
+        )
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cpu_percent', 'memory_percent', 'num_threads'])
+        if proc.info['name'] == 'kvm'
+    ]
+    for proc, cmdline, id in procs:
+        # Extract vm labels from cmdline
+        info_label_dict = {get_label_name(l): flag_to_label_value(cmdline,l) for l in label_flags}
+        info_label_dict['pid']=str(proc.pid)
+        logging.debug(f"got PID: {proc.pid}")
+        info_dict["kvm"].info(info_label_dict)
 
-        if 'kvm' == proc.info['name']:
-            cmdline = proc.cmdline()
-            id = flag_to_label_value(cmdline,"-id")
+        d = {
+            "kvm_vcores": flag_to_label_value(cmdline,"-smp"),
+            "kvm_maxmem": int(flag_to_label_value(cmdline,"-m"))*1024,
+            "kvm_memory_percent": proc.info['memory_percent'],
+            "kvm_threads": proc.info['num_threads'],
+        }
 
-            # Extract vm labels from cmdline
-            info_label_dict = {get_label_name(l): flag_to_label_value(cmdline,l) for l in label_flags}
-            info_label_dict['pid']=str(proc.pid)
-            logging.debug(f"got PID: {proc.pid}")
-            info_dict["kvm"].info(info_label_dict)
+        for k, v in d.items():
+            gauge_dict[k].labels(id=id).set(v)
+            logging.debug(f"gauge_dict[{k}].labels(id={id}).set({v})")
 
-            d = {
-                "kvm_vcores": flag_to_label_value(cmdline,"-smp"),
-                "kvm_maxmem": int(flag_to_label_value(cmdline,"-m"))*1024,
-                "kvm_memory_percent": proc.info['memory_percent'],
-                "kvm_threads": proc.info['num_threads'],
-            }
+        cpu_times = proc.cpu_times()
+        for mode in ['user', 'system', 'iowait']:
+            gauge_dict["kvm_cpu"].labels(id=id, mode=mode).set(getattr(cpu_times, mode))
 
-            for k, v in d.items():
-                gauge_dict[k].labels(id=id).set(v)
-                logging.debug(f"gauge_dict[{k}].labels(id={id}).set({v})")
+        io = proc.io_counters()
+        for io_type, attr in itertools.product(['read', 'write'], ['count', 'bytes', 'chars']):
+            gauge = globals()["gauge_dict"][f'kvm_io_{io_type}_{attr}']
+            gauge.labels(id=id).set(getattr(io, f"{io_type}_{attr}"))
 
-            cpu_times = proc.cpu_times()
-            for mode in ['user', 'system', 'iowait']:
-                gauge_dict["kvm_cpu"].labels(id=id, mode=mode).set(getattr(cpu_times, mode))
+        for type in [ "voluntary", "involuntary" ]:
+            gauge_dict["kvm_ctx_switches"].labels(id=id, type=type).set(getattr(proc.num_ctx_switches(),type))
 
-            io = proc.io_counters()
-            for io_type, attr in itertools.product(['read', 'write'], ['count', 'bytes', 'chars']):
-                gauge = globals()["gauge_dict"][f'kvm_io_{io_type}_{attr}']
-                gauge.labels(id=id).set(getattr(io, f"{io_type}_{attr}"))
+        memory_metrics = get_memory_info(proc.pid)  # Assuming proc.pid gives you the PID of the process
+        for key, value in memory_metrics.items():
+            gauge_dict["kvm_memory_extended"].labels(id=id, type=key).set(value)
 
-            for type in [ "voluntary", "involuntary" ]:
-                gauge_dict["kvm_ctx_switches"].labels(id=id, type=type).set(getattr(proc.num_ctx_switches(),type))
+        for nic_info in extract_nic_info_from_monitor(id):
+            queues = nic_info["queues"]
+            del nic_info["queues"]
+            nic_labels = {"id": id, "ifname": nic_info["ifname"]}
+            prom_nic_info = create_or_get_info("kvm_nic", nic_labels.keys())
+            prom_nic_info.labels(**nic_labels).info({k: v for k, v in nic_info.items() if k not in nic_labels.keys()})
 
-            memory_metrics = get_memory_info(proc.pid)  # Assuming proc.pid gives you the PID of the process
-            for key, value in memory_metrics.items():
-                gauge_dict["kvm_memory_extended"].labels(id=id, type=key).set(value)
+            gauge_dict["kvm_nic_queues"].labels(**nic_labels).set(queues)
 
-            for nic_info in extract_nic_info_from_monitor(id):
-                queues = nic_info["queues"]
-                del nic_info["queues"]
-                nic_labels = {"id": id, "ifname": nic_info["ifname"]}
-                prom_nic_info = create_or_get_info("kvm_nic", nic_labels.keys())
-                prom_nic_info.labels(**nic_labels).info({k: v for k, v in nic_info.items() if k not in nic_labels.keys()})
-
-                gauge_dict["kvm_nic_queues"].labels(**nic_labels).set(queues)
-
-                interface_stats = read_interface_stats(nic_info["ifname"])
-                for filename, value in interface_stats.items():
-                    metric_name = f"kvm_nic_{filename}"
-                    gauge = create_or_get_gauge(metric_name, nic_labels.keys())
-                    gauge.labels(**nic_labels).set(value)
-
-            
+            interface_stats = read_interface_stats(nic_info["ifname"])
+            for filename, value in interface_stats.items():
+                metric_name = f"kvm_nic_{filename}"
+                gauge = create_or_get_gauge(metric_name, nic_labels.keys())
+                gauge.labels(**nic_labels).set(value)
 
 def main():
     parser = argparse.ArgumentParser(description='PVE metrics exporter for Prometheus')
