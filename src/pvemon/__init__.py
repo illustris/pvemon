@@ -8,6 +8,9 @@ import os
 
 import pexpect
 
+import logging
+import cProfile
+
 DEFAULT_PORT = 9116
 DEFAULT_INTERVAL = 10
 DEFAULT_PREFIX = "pve"
@@ -53,6 +56,17 @@ def create_or_get_info(info_name, labels):
     if (info_name,str(labels)) not in dynamic_infos:
         dynamic_infos[(info_name,str(labels))] = Info(f"{prefix}_{info_name}", f'{info_name} for {str(labels)}', labels)
     return dynamic_infos[(info_name,str(labels))]
+
+def get_memory_info(pid):
+    metrics = {}
+    with open(f"/proc/{pid}/status") as f:
+        for line in f:
+            if line.startswith(("Vm", "Rss", "Hugetlb")):
+                key, value, unit = line.split()
+                if unit == "kB":
+                    metrics[key.lower()] = int(value) * 1024  # convert KB to bytes
+    return metrics
+
 
 def extract_nic_info_from_monitor(vm_id):
     child = pexpect.spawn(f'qm monitor {vm_id}')
@@ -108,6 +122,7 @@ def read_interface_stats(ifname):
 
 def collect_kvm_metrics():
     for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cpu_percent', 'memory_percent', 'num_threads']):
+
         if 'kvm' == proc.info['name']:
             cmdline = proc.cmdline()
             id = flag_to_label_value(cmdline,"-id")
@@ -115,6 +130,7 @@ def collect_kvm_metrics():
             # Extract vm labels from cmdline
             info_label_dict = {get_label_name(l): flag_to_label_value(cmdline,l) for l in label_flags}
             info_label_dict['pid']=str(proc.pid)
+            logging.debug(f"got PID: {proc.pid}")
             info_dict["kvm"].info(info_label_dict)
 
             d = {
@@ -126,6 +142,7 @@ def collect_kvm_metrics():
 
             for k, v in d.items():
                 gauge_dict[k].labels(id=id).set(v)
+                logging.debug(f"gauge_dict[{k}].labels(id={id}).set({v})")
 
             cpu_times = proc.cpu_times()
             for mode in ['user', 'system', 'iowait']:
@@ -139,11 +156,9 @@ def collect_kvm_metrics():
             for type in [ "voluntary", "involuntary" ]:
                 gauge_dict["kvm_ctx_switches"].labels(id=id, type=type).set(getattr(proc.num_ctx_switches(),type))
 
-            for attr in dir(proc.memory_full_info()):
-                if not attr.startswith('_'):
-                    value = getattr(proc.memory_full_info(), attr)
-                    if not callable(value):
-                        gauge_dict["kvm_memory_extended"].labels(id=id, type=attr).set(value)
+            memory_metrics = get_memory_info(proc.pid)  # Assuming proc.pid gives you the PID of the process
+            for key, value in memory_metrics.items():
+                gauge_dict["kvm_memory_extended"].labels(id=id, type=key).set(value)
 
             for nic_info in extract_nic_info_from_monitor(id):
                 queues = nic_info["queues"]
@@ -168,8 +183,15 @@ def main():
     parser.add_argument('--interval', type=int, default=DEFAULT_INTERVAL, help='Interval between metric collections in seconds')
     parser.add_argument('--collect-running-vms', type=str, default='true', help='Enable or disable collecting running VMs metric (true/false)')
     parser.add_argument('--metrics-prefix', type=str, default=DEFAULT_PREFIX, help='<prefix>_ will be prepended to each metric name')
+    parser.add_argument('--loglevel', type=str, default='INFO', help='Set log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
+    parser.add_argument('--profile', type=str, default='false', help='collect metrics once, and print profiling stats')
 
     args = parser.parse_args()
+
+    loglevel = getattr(logging, args.loglevel.upper(), None)
+    if not isinstance(loglevel, int):
+        raise ValueError(f'Invalid log level: {args.loglevel}')
+    logging.basicConfig(level=loglevel,format='%(asctime)s: %(message)s')
 
     global prefix
     prefix = args.metrics_prefix
@@ -181,6 +203,14 @@ def main():
         info_dict[name] = Info(f"{prefix}_{name}", description)
 
     start_http_server(args.port)
+
+    if args.profile.lower() == 'true':
+        profiler = cProfile.Profile()
+        profiler.enable()
+        collect_kvm_metrics()
+        profiler.disable()
+        profiler.print_stats(sort='cumulative')
+        return
 
     while True:
         if args.collect_running_vms.lower() == 'true':
