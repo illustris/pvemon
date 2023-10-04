@@ -14,6 +14,8 @@ import cProfile
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
+import qmblock
+
 DEFAULT_PORT = 9116
 DEFAULT_INTERVAL = 10
 DEFAULT_PREFIX = "pve"
@@ -110,7 +112,6 @@ def extract_nic_info_from_monitor(vm_id):
             "model": cfg["model"],
             "macaddr": cfg["macaddr"],
             "ifname": cfg["ifname"]
-
         }
         for netdev, cfg in nics_map.items()
     ]
@@ -191,7 +192,14 @@ def collect_kvm_metrics():
                     gauge = create_or_get_gauge(metric_name, nic_labels.keys())
                     gauge.labels(**nic_labels).set(value)
 
+        def map_disk_proc(id):
+            for disk_name, disk_info in qmblock.extract_disk_info_from_monitor(id).items():
+                disk_labels = {"id": id, "disk_name": disk_name}
+                prom_disk_info = create_or_get_info("kvm_disk", disk_labels.keys())
+                prom_disk_info.labels(**disk_labels).info({k: v for k, v in disk_info.items() if k not in disk_labels.keys()})
+
         list(executor.map(map_netstat_proc, [ proc[2] for proc in procs ]))
+        list(executor.map(map_disk_proc, [ proc[2] for proc in procs ]))
 
 def main():
     parser = argparse.ArgumentParser(description='PVE metrics exporter for Prometheus')

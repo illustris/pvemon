@@ -1,3 +1,4 @@
 result
 *~
 *.deb
+__pycache__
