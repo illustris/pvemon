@@ -138,7 +138,7 @@ def collect_kvm_metrics():
             flag_to_label_value(proc.cmdline(),"-id")
         )
         for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cpu_percent', 'memory_percent', 'num_threads'])
-        if proc.info['name'] == 'kvm'
+        if proc.exe() == '/usr/bin/qemu-system-x86_64'
     ]
     for proc, cmdline, id in procs:
         # Extract vm labels from cmdline
