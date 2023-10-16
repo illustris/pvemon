@@ -2,6 +2,8 @@ import pexpect
 import re
 import os
 
+import pvecommon
+
 def get_device(disk_path):
     try:
         return os.readlink(disk_path).split('/')[-1]
@@ -9,16 +11,7 @@ def get_device(disk_path):
         return None
 
 def extract_disk_info_from_monitor(vm_id):
-    child = pexpect.spawn(f'qm monitor {vm_id}')
-    # Wait for the QEMU monitor prompt
-    child.expect('qm>', timeout=10)
-    # Execute 'info block'
-    child.sendline('info block')
-    # Wait for the prompt again
-    child.expect('qm>', timeout=10)
-    # Parse the output
-    raw_output = child.before.decode('utf-8').strip()
-    child.close()
+    raw_output = pvecommon.qm_term_cmd(vm_id, 'info block')
     disks_map = {}
     disks = [x.strip() for x in raw_output.split("drive-")[1:]]
     for disk in disks:

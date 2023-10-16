@@ -14,6 +14,7 @@ import cProfile
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
+import pvecommon
 import qmblock
 
 DEFAULT_PORT = 9116
@@ -77,25 +78,13 @@ def get_memory_info(pid):
 
 
 def extract_nic_info_from_monitor(vm_id):
-    child = pexpect.spawn(f'qm monitor {vm_id}')
-    
-    # Wait for the QEMU monitor prompt
-    child.expect('qm>', timeout=10)
-    
-    # Execute 'info network'
-    child.sendline('info network')
-    
-    # Wait for the prompt again
-    child.expect('qm>', timeout=10)
-    
-    # Parse the output
-    raw_output = child.before.decode('utf-8').strip()
-    child.close()
+    raw_output = pvecommon.qm_term_cmd(vm_id, 'info network')
+
     nic_info_list = re.findall(r'(net\d+:.*?)(?=(net\d+:|$))', raw_output, re.S)
 
     nics_map = {}
 
-    for netdev, cfg in [x.strip().split(": ") for x in re.findall(r'[^\n]*(net\d+:[^\n]*)\n', raw_output, re.S)]:
+    for netdev, cfg in [x.strip().split(": ") for x in re.findall(r'(net\d+:.*?)(?:\r{0,2}\n|(?=\s*\\ net\d+:)|$)', raw_output, re.S)]:
         for cfg_pair in cfg.split(","):
             if cfg_pair=='':
                 continue
@@ -209,6 +198,7 @@ def main():
     parser.add_argument('--metrics-prefix', type=str, default=DEFAULT_PREFIX, help='<prefix>_ will be prepended to each metric name')
     parser.add_argument('--loglevel', type=str, default='INFO', help='Set log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
     parser.add_argument('--profile', type=str, default='false', help='collect metrics once, and print profiling stats')
+    parser.add_argument('--qm-terminal-timeout', type=int, default=10, help='timeout for qm terminal commands')
 
     args = parser.parse_args()
 
@@ -219,6 +209,7 @@ def main():
 
     global prefix
     prefix = args.metrics_prefix
+    pvecommon.global_qm_timeout = args.qm_terminal_timeout
 
     for name, description, labels in gauge_settings:
         gauge_dict[name] = Gauge(f"{prefix}_{name}", description, labels)
