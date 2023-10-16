@@ -117,18 +117,20 @@ def read_interface_stats(ifname):
     return stats
 
 def collect_kvm_metrics():
-    procs = [
-        (
-            # proc object
-            proc,
-            # cmdline list
-            proc.cmdline(),
-            # VMID
-            flag_to_label_value(proc.cmdline(),"-id")
-        )
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cpu_percent', 'memory_percent', 'num_threads'])
-        if proc.exe() == '/usr/bin/qemu-system-x86_64'
-    ]
+    procs = []
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cpu_percent', 'memory_percent', 'num_threads']):
+        try:
+            if proc.info['exe'] == '/usr/bin/qemu-system-x86_64':
+                procs.append(
+                    (
+                        proc,
+                        proc.info['cmdline'],
+                        flag_to_label_value(proc.info['cmdline'], "-id")
+                    )
+                )
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+
     for proc, cmdline, id in procs:
         # Extract vm labels from cmdline
         info_label_dict = {get_label_name(l): flag_to_label_value(cmdline,l) for l in label_flags}
