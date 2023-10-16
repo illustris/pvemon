@@ -32,6 +32,7 @@ rec {
 				inherit system;
 				program = "${default}/bin/${default.pname}";
 			};
+			updateRelease = writeScriptBin "update-release" (builtins.readFile ./utils/update-release.sh);
 		};
 
 	};
