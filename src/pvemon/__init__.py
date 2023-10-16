@@ -199,6 +199,8 @@ def main():
     parser.add_argument('--loglevel', type=str, default='INFO', help='Set log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
     parser.add_argument('--profile', type=str, default='false', help='collect metrics once, and print profiling stats')
     parser.add_argument('--qm-terminal-timeout', type=int, default=10, help='timeout for qm terminal commands')
+    parser.add_argument('--qm-max-ttl', type=int, default=600, help='cache ttl for data pulled from qm monitor')
+    parser.add_argument('--qm-rand', type=int, default=60, help='randomize qm monitor cache expiry')
 
     args = parser.parse_args()
 
@@ -210,6 +212,8 @@ def main():
     global prefix
     prefix = args.metrics_prefix
     pvecommon.global_qm_timeout = args.qm_terminal_timeout
+    pvecommon.qm_max_ttl = args.qm_max_ttl
+    pvecommon.qm_rand = args.qm_rand
 
     for name, description, labels in gauge_settings:
         gauge_dict[name] = Gauge(f"{prefix}_{name}", description, labels)
