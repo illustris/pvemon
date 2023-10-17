@@ -203,6 +203,7 @@ def main():
     parser.add_argument('--qm-terminal-timeout', type=int, default=10, help='timeout for qm terminal commands')
     parser.add_argument('--qm-max-ttl', type=int, default=600, help='cache ttl for data pulled from qm monitor')
     parser.add_argument('--qm-rand', type=int, default=60, help='randomize qm monitor cache expiry')
+    parser.add_argument('--qm-monitor-defer-close', type=str, default="true", help='defer and retry closing unresponsive qm monitor sessions')
 
     args = parser.parse_args()
 
@@ -216,6 +217,7 @@ def main():
     pvecommon.global_qm_timeout = args.qm_terminal_timeout
     pvecommon.qm_max_ttl = args.qm_max_ttl
     pvecommon.qm_rand = args.qm_rand
+    pvecommon.qm_monitor_defer_close = args.qm_monitor_defer_close
 
     for name, description, labels in gauge_settings:
         gauge_dict[name] = Gauge(f"{prefix}_{name}", description, labels)
