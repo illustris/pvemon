@@ -36,16 +36,10 @@ def extract_disk_info_from_monitor(vm_id):
             disks_map[disk_name]["read_only"] = "true"
         if disk_type == "qcow2":
             disks_map[disk_name]["vol_name"] = disk_path.split("/")[-1].split(".")[0]
-        if "/dev/zvol" in disk_path:
+        if "/dev/zvol" in disk_path: # zfs
             disks_map[disk_name]["disk_type"] = "zvol"
             disks_map[disk_name]["pool"] = "/".join(disk_path.split("/")[3:-1])
             disks_map[disk_name]["vol_name"] = disk_path.split("/")[-1]
-            disks_map[disk_name]["device"] = get_device(disk_path)
-        elif re.match(r'/dev/[^/]+/vm-\d+-disk-\d+', disk_path): # lvm
-            disks_map[disk_name]["disk_type"] = "lvm"
-            vg_name, vol_name = re.search(r'/dev/([^/]+)/(vm-\d+-disk-\d+)', disk_path).groups()
-            disks_map[disk_name]["vg_name"] = vg_name
-            disks_map[disk_name]["vol_name"] = vol_name
             disks_map[disk_name]["device"] = get_device(disk_path)
         elif "/dev/rbd-pve" in disk_path: # rbd
             disks_map[disk_name]["disk_type"] = "rbd"
@@ -54,15 +48,12 @@ def extract_disk_info_from_monitor(vm_id):
             disks_map[disk_name]["pool_name"] = rbd_parts[-2]
             disks_map[disk_name]["vol_name"] = rbd_parts[-1]
             disks_map[disk_name]["device"] = get_device(disk_path)
-        elif "/dev/rbd-pve" in disk_path:
-            disks_map[disk_name]["disk_type"] = "rbd"
-            rbd_parts = disk_path.split('/')
-            pool_name = rbd_parts[-3]
-            vm_id = rbd_parts[-1].split('-')[1]
-            disk_number = rbd_parts[-1].split('-')[-1]
-            disks_map[disk_name]["pool_name"] = pool_name
-            disks_map[disk_name]["rbd_vm_id"] = vm_id
-            disks_map[disk_name]["rbd_disk_number"] = disk_number
+        elif re.match(r'/dev/[^/]+/vm-\d+-disk-\d+', disk_path): # lvm
+            disks_map[disk_name]["disk_type"] = "lvm"
+            vg_name, vol_name = re.search(r'/dev/([^/]+)/(vm-\d+-disk-\d+)', disk_path).groups()
+            disks_map[disk_name]["vg_name"] = vg_name
+            disks_map[disk_name]["vol_name"] = vol_name
+            disks_map[disk_name]["device"] = get_device(disk_path)
         for line in data[1:-1]:
             if "Attached to" in line:
                 attached_to = line.split(":")[-1].strip()
