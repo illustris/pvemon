@@ -118,7 +118,7 @@ def read_interface_stats(ifname):
 
 def collect_kvm_metrics():
     procs = []
-    for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'cpu_percent', 'memory_percent', 'num_threads']):
+    for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline', 'cpu_percent', 'memory_percent', 'num_threads']):
         try:
             if proc.info['exe'] == '/usr/bin/qemu-system-x86_64':
                 procs.append(
