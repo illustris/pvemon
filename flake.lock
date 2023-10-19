@@ -2,37 +2,43 @@
   "nodes": {
     "debBundler": {
       "inputs": {
-        "flake-utils": "flake-utils",
+        "home-manager": "home-manager",
         "nixpkgs": [
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1632973430,
-        "narHash": "sha256-9G8zo+0nfYAALV5umCyQR/2hVUFNH10JropBkyxZGGw=",
-        "owner": "juliosueiras-nix",
-        "repo": "nix-utils",
-        "rev": "b44e1ffd726aa03056db9df469efb497d8b9871b",
+        "lastModified": 1697648434,
+        "narHash": "sha256-jG+JbJIfDYnHSsx2JPMSW1jy5qbIjE6i6Q4p8AR6whk=",
+        "owner": "illustris",
+        "repo": "flake",
+        "rev": "56196374f8bc4bc5db1e73d8c0da79b21607c06f",
         "type": "github"
       },
       "original": {
-        "owner": "juliosueiras-nix",
-        "repo": "nix-utils",
+        "owner": "illustris",
+        "repo": "flake",
         "type": "github"
       }
     },
-    "flake-utils": {
+    "home-manager": {
+      "inputs": {
+        "nixpkgs": [
+          "debBundler",
+          "nixpkgs"
+        ]
+      },
       "locked": {
-        "lastModified": 1623875721,
-        "narHash": "sha256-A8BU7bjS5GirpAUv4QA+QnJ4CceLHkcXdRp4xITDB0s=",
-        "owner": "numtide",
-        "repo": "flake-utils",
-        "rev": "f7e004a55b120c02ecb6219596820fcd32ca8772",
+        "lastModified": 1697622055,
+        "narHash": "sha256-t9rwzjlfgCnXDFGH3wsooYfAOA+XqQmgTojhzuNafZ4=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "84fa81c7acb018c3c5a504dcefbc28a182c933c2",
         "type": "github"
       },
       "original": {
-        "owner": "numtide",
-        "repo": "flake-utils",
+        "owner": "nix-community",
+        "repo": "home-manager",
         "type": "github"
       }
     },

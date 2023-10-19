@@ -4,7 +4,7 @@ rec {
 	inputs = {
 		nixpkgs.url = github:nixos/nixpkgs/nixos-unstable;
 		debBundler = {
-			url = github:juliosueiras-nix/nix-utils;
+			url = github:illustris/flake;
 			inputs.nixpkgs.follows = "nixpkgs";
 		};
 	};
@@ -28,10 +28,7 @@ rec {
 				};
 			};
 			default = pvemon;
-			deb = debBundler.bundlers.deb {
-				inherit system;
-				program = "${default}/bin/${default.pname}";
-			};
+			deb = debBundler.bundlers.x86_64-linux.deb default;
 			updateRelease = writeScriptBin "update-release" (builtins.readFile ./utils/update-release.sh);
 		};
 
