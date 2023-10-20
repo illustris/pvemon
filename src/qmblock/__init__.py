@@ -1,6 +1,7 @@
 import pexpect
 import re
 import os
+import json
 
 import pvecommon
 
@@ -9,6 +10,21 @@ def get_device(disk_path):
         return os.readlink(disk_path).split('/')[-1]
     except OSError:
         return None
+
+def handle_json_path(path):
+    def search_dict(dictionary):
+        if 'driver' in dictionary and dictionary['driver'] == 'host_device' and 'filename' in dictionary:
+            return dictionary['filename']
+        for key, value in dictionary.items():
+            if isinstance(value, dict):
+                result = search_dict(value)
+                if result:
+                    return result
+        return None
+    filename = search_dict(json.loads(path[5:]))
+    if filename is None:
+        raise ValueError('No host_device driver found or filename is missing')
+    return filename
 
 def extract_disk_info_from_monitor(vm_id):
     raw_output = pvecommon.qm_term_cmd(vm_id, 'info block')
@@ -26,6 +42,9 @@ def extract_disk_info_from_monitor(vm_id):
         if "efidisk" in disk_name: # TODO: handle this later
             continue
 
+        if disk_path.startswith("json:"):
+            disk_path = handle_json_path(disk_path)
+
         disks_map[disk_name]={
             "disk_name": disk_name,
             "block_id": block_id,
@@ -36,12 +55,12 @@ def extract_disk_info_from_monitor(vm_id):
             disks_map[disk_name]["read_only"] = "true"
         if disk_type == "qcow2":
             disks_map[disk_name]["vol_name"] = disk_path.split("/")[-1].split(".")[0]
-        if "/dev/zvol" in disk_path: # zfs
+        if disk_path.startswith("/dev/zvol"): # zfs
             disks_map[disk_name]["disk_type"] = "zvol"
             disks_map[disk_name]["pool"] = "/".join(disk_path.split("/")[3:-1])
             disks_map[disk_name]["vol_name"] = disk_path.split("/")[-1]
             disks_map[disk_name]["device"] = get_device(disk_path)
-        elif "/dev/rbd-pve" in disk_path: # rbd
+        elif disk_path.startswith("/dev/rbd-pve"): # rbd
             disks_map[disk_name]["disk_type"] = "rbd"
             rbd_parts = disk_path.split('/')
             disks_map[disk_name]["cluster_id"] = rbd_parts[-3]
