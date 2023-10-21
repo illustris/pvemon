@@ -114,6 +114,7 @@ def read_interface_stats(ifname):
     return stats
 
 def collect_kvm_metrics():
+    logging.debug("collect_kvm_metrics() called")
     gauge_dict = {}
     info_dict = {}
     for name, description, labels in gauge_settings:
@@ -195,6 +196,7 @@ def collect_kvm_metrics():
 
         def map_disk_proc(id):
             for disk_name, disk_info in qmblock.extract_disk_info_from_monitor(id).items():
+                logging.debug(f"map_disk_proc: {disk_name=}, {disk_info=}")
                 disk_labels = {"id": id, "disk_name": disk_name}
                 prom_disk_info = create_or_get_info("kvm_disk", disk_labels.keys(), dynamic_infos, info_lock)
                 prom_disk_info.add_metric(disk_labels.values(), disk_info)
@@ -204,12 +206,13 @@ def collect_kvm_metrics():
 
     for v in info_dict.values():
         yield v
-    for x in dynamic_infos.values():
+    for v in dynamic_infos.values():
         yield v
     for v in gauge_dict.values():
         yield v
     for v in dynamic_gauges.values():
         yield v
+    logging.debug("collect_kvm_metrics() return")
 
 class PVECollector(object):
     def __init__(self):
