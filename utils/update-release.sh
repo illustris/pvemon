@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 execute() {
   if [ "$dry_run" == "1" ]; then
