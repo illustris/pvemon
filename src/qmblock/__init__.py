@@ -81,7 +81,8 @@ def extract_disk_info_from_monitor(vm_id):
                 disks_map[disk_name]["attached_to"] = attached_to
             if "Cache mode" in line:
                 for cache_mode in line.split(":")[-1].strip().split(", "):
-                    disks_map[disk_name][f"cache_mode_{cache_mode}"] = "true"
+                    cache_mode_nospace = "_".join(cache_mode.split())
+                    disks_map[disk_name][f"cache_mode_{cache_mode_nospace}"] = "true"
             if "Detect zeroes" in line:
                 disks_map[disk_name]["detect_zeroes"] = "on"
     return disks_map
