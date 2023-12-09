@@ -5,6 +5,8 @@ import json
 
 import pvecommon
 
+extract_disk_info_max_retries = 1
+
 def get_device(disk_path):
     try:
         return os.readlink(disk_path).split('/')[-1]
@@ -26,7 +28,7 @@ def handle_json_path(path):
         raise ValueError('No host_device driver found or filename is missing')
     return filename
 
-def extract_disk_info_from_monitor(vm_id):
+def extract_disk_info_from_monitor(vm_id, retries = 0):
     raw_output = pvecommon.qm_term_cmd(vm_id, 'info block')
     disks_map = {}
     disks = [x.strip() for x in raw_output.split("drive-")[1:]]
@@ -73,6 +75,11 @@ def extract_disk_info_from_monitor(vm_id):
             disks_map[disk_name]["vg_name"] = vg_name
             disks_map[disk_name]["vol_name"] = vol_name
             disks_map[disk_name]["device"] = get_device(disk_path)
+        # At this point, if disks_map[disk_name]["device"] exists and is None, the cache might be stale
+        # Flush the cache for this VMID and try again
+        if "device" in disks_map[disk_name] and disks_map[disk_name]["device"] == None and retries < extract_disk_info_max_retries:
+            pvecommon.qm_term_cmd.invalidate_cache(vm_id, 'info block')
+            return extract_disk_info_from_monitor(vm_id, retries+1)
         for line in data[1:-1]:
             if "Attached to" in line:
                 attached_to = line.split(":")[-1].strip()

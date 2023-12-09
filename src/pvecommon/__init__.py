@@ -30,11 +30,20 @@ def ttl_cache_with_randomness(max_ttl, randomness_factor):
             result = func(*args, **kwargs)
             cache[key] = (result, time.time())
             return result
+
+        def invalidate_cache(*args, **kwargs):
+            key = str(args) + str(kwargs)
+            if key in cache:
+                del cache[key]
+
+        # Attach the invalidation function to the wrapper
+        wrapper.invalidate_cache = invalidate_cache
+
         return wrapper
     return decorator
 
 @ttl_cache_with_randomness(qm_max_ttl, qm_rand)
-def qm_term_cmd(vm_id, cmd, timeout=global_qm_timeout):
+def qm_term_cmd(vm_id, cmd, timeout=global_qm_timeout): # TODO: ignore cmd timeout in cache key
     global deferred_closing
     child = pexpect.spawn(f'qm monitor {vm_id}')
     try:
