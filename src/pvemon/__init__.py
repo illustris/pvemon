@@ -56,7 +56,7 @@ def parse_mem(cmdline):
     # lazy way to detect NUMA
     # the token after -m might look something like 'size=1024,slots=255,maxmem=4194304M'
     if ret.isnumeric():
-        return int(ret)
+        return int(ret)*1024
 
     # probably using NUMA
     ret = 0
