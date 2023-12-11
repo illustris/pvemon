@@ -51,6 +51,21 @@ info_settings = [
 
 flag_to_label_value = lambda args, match: next((args[i+1] for i, x in enumerate(args[:-1]) if x == match), "unknown").split(",")[0]
 
+def parse_mem(cmdline):
+    ret = flag_to_label_value(cmdline, "-m")
+    # lazy way to detect NUMA
+    # the token after -m might look something like 'size=1024,slots=255,maxmem=4194304M'
+    if ret.isnumeric():
+        return int(ret)
+
+    # probably using NUMA
+    ret = 0
+    for arg in cmdline:
+        if "memory-backend-ram" in arg:
+            assert(arg[-1]=='M')
+            ret += 1024*int(arg.split("=")[-1][:-1])
+    return ret
+
 def create_or_get_gauge(metric_name, labels, dynamic_gauges, gauge_lock):
     with gauge_lock:
         if metric_name not in dynamic_gauges:
@@ -151,7 +166,7 @@ def collect_kvm_metrics():
 
         d = {
             "kvm_vcores": flag_to_label_value(cmdline,"-smp"),
-            "kvm_maxmem": int(flag_to_label_value(cmdline,"-m"))*1024,
+            "kvm_maxmem": parse_mem(cmdline),
             "kvm_memory_percent": proc.info['memory_percent'],
             "kvm_threads": proc.info['num_threads'],
         }
