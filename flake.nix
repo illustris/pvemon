@@ -14,7 +14,7 @@ rec {
 		packages.x86_64-linux = with nixpkgs.legacyPackages.x86_64-linux; rec {
 			pvemon = python3Packages.buildPythonApplication {
 				pname = "pvemon";
-				version = "1.1.5";
+				version = "1.1.6";
 				src = ./src;
 				propagatedBuildInputs = with python3Packages; [
 					pexpect
