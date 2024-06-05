@@ -147,11 +147,17 @@ def collect_kvm_metrics():
     for proc in psutil.process_iter(['pid', 'name', 'exe', 'cmdline', 'cpu_percent', 'memory_percent', 'num_threads']):
         try:
             if proc.info['exe'] == '/usr/bin/qemu-system-x86_64':
+                vmid = flag_to_label_value(proc.info['cmdline'], "-id")
+                # Check if VM definition exists. If it is missing, qm commands will fail.
+                # VM configs are typically missing when a VM is migrating in.
+                # The config file is moved after the drives and memory are synced.
+                if not os.path.exists(f'/etc/pve/qemu-server/{vmid}.conf'):
+                    continue
                 procs.append(
                     (
                         proc,
                         proc.info['cmdline'],
-                        flag_to_label_value(proc.info['cmdline'], "-id")
+                        vmid
                     )
                 )
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
