@@ -41,6 +41,8 @@ gauge_settings = [
     ('kvm_io_write_chars', 'Number of bytes written including buffers', ['id']),
 
     ('kvm_nic_queues', 'Number of queues in multiqueue config', ['id', 'ifname']),
+
+    ('kvm_disk_size', 'Size of virtual disk', ['id', 'disk_name']),
 ]
 
 label_flags = [ "-id", "-name", "-cpu" ]
@@ -163,6 +165,8 @@ def collect_kvm_metrics():
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
 
+    # Try to find ID to pool mapping here
+
     for proc, cmdline, id in procs:
         # Extract vm labels from cmdline
         info_label_dict = {get_label_name(l): flag_to_label_value(cmdline,l) for l in label_flags}
@@ -221,6 +225,12 @@ def collect_kvm_metrics():
                 disk_labels = {"id": id, "disk_name": disk_name}
                 prom_disk_info = create_or_get_info("kvm_disk", disk_labels.keys(), dynamic_infos, info_lock)
                 prom_disk_info.add_metric(disk_labels.values(), disk_info)
+                disk_size = qmblock.get_disk_size(disk_info["disk_path"], disk_info["disk_type"])
+                if disk_size == None and disk_info["disk_type"] != "qcow2":
+                    logging.debug(f"collect_kvm_metrics: failed to get disk size for {disk_info=}")
+                else:
+                    gauge_dict["kvm_disk_size"].add_metric([id, disk_name], qmblock.get_disk_size(disk_info["disk_path"], disk_info["disk_type"]))
+
 
         list(executor.map(map_netstat_proc, [ proc[2] for proc in procs ]))
         list(executor.map(map_disk_proc, [ proc[2] for proc in procs ]))

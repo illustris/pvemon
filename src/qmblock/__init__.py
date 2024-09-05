@@ -2,6 +2,7 @@ import pexpect
 import re
 import os
 import json
+import stat
 
 import pvecommon
 
@@ -93,6 +94,24 @@ def extract_disk_info_from_monitor(vm_id, retries = 0):
             if "Detect zeroes" in line:
                 disks_map[disk_name]["detect_zeroes"] = "on"
     return disks_map
+
+def get_disk_size(disk_path, disk_type):
+    if stat.S_ISBLK(os.stat(disk_path).st_mode):
+        disk_name = os.path.basename(os.path.realpath(disk_path))
+        size_file_path = f"/sys/block/{disk_name}/size"
+        sector_size_file_path = f"/sys/block/{disk_name}/queue/hw_sector_size"
+
+        with open(size_file_path, 'r') as f:
+            sectors = int(f.read().strip())
+
+            with open(sector_size_file_path, 'r') as sector_size_file:
+                sector_size = int(sector_size_file.read().strip())
+
+                size_in_bytes = sectors * sector_size
+    else:
+        size_in_bytes = os.path.getsize(disk_path)
+
+    return size_in_bytes
 
 if __name__ == "__main__":
     import json
