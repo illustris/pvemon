@@ -67,6 +67,8 @@ def extract_disk_info_from_monitor(vm_id, retries = 0):
             disks_map[disk_name]["disk_type"] = "rbd"
             rbd_parts = disk_path.split('/')
             disks_map[disk_name]["cluster_id"] = rbd_parts[-3]
+            disks_map[disk_name]["pool"] = rbd_parts[-2]
+            # Keeping for backwards compatibility
             disks_map[disk_name]["pool_name"] = rbd_parts[-2]
             disks_map[disk_name]["vol_name"] = rbd_parts[-1]
             disks_map[disk_name]["device"] = get_device(disk_path)

@@ -19,7 +19,10 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 
 import pvecommon
+import pvestorage
 import qmblock
+
+import builtins
 
 DEFAULT_PORT = 9116
 DEFAULT_INTERVAL = 10
@@ -69,12 +72,14 @@ def parse_mem(cmdline):
     return ret
 
 def create_or_get_gauge(metric_name, labels, dynamic_gauges, gauge_lock):
+    logging.debug(f"create_or_get_gauge({metric_name=}, labels={str(labels)}")
     with gauge_lock:
         if metric_name not in dynamic_gauges:
             dynamic_gauges[metric_name] = GaugeMetricFamily(f"{prefix}_{metric_name}", f'{metric_name} for KVM process', labels=labels)
     return dynamic_gauges[metric_name]
 
 def create_or_get_info(info_name, labels, dynamic_infos, info_lock):
+    logging.debug(f"create_or_get_info({info_name=}, labels={str(labels)}")
     with info_lock:
         if (info_name,str(labels)) not in dynamic_infos:
             dynamic_infos[(info_name,str(labels))] = InfoMetricFamily(f"{prefix}_{info_name}", f'{info_name} for {str(labels)}', labels=labels)
@@ -231,7 +236,6 @@ def collect_kvm_metrics():
                 else:
                     gauge_dict["kvm_disk_size"].add_metric([id, disk_name], qmblock.get_disk_size(disk_info["disk_path"], disk_info["disk_type"]))
 
-
         list(executor.map(map_netstat_proc, [ proc[2] for proc in procs ]))
         list(executor.map(map_disk_proc, [ proc[2] for proc in procs ]))
 
@@ -253,12 +257,16 @@ class PVECollector(object):
         if cli_args.collect_running_vms.lower() == 'true':
             for x in collect_kvm_metrics():
                 yield x
+        if cli_args.collect_storage.lower() == 'true':
+            for x in pvestorage.collect_storage_metrics():
+                yield x
 
 def main():
     parser = argparse.ArgumentParser(description='PVE metrics exporter for Prometheus')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT, help='Port for the exporter to listen on')
     parser.add_argument('--interval', type=int, default=DEFAULT_INTERVAL, help='THIS OPTION DOES NOTHING')
     parser.add_argument('--collect-running-vms', type=str, default='true', help='Enable or disable collecting running VMs metric (true/false)')
+    parser.add_argument('--collect-storage', type=str, default='true', help='Enable or disable collecting storage info (true/false)')
     parser.add_argument('--metrics-prefix', type=str, default=DEFAULT_PREFIX, help='<prefix>_ will be prepended to each metric name')
     parser.add_argument('--loglevel', type=str, default='INFO', help='Set log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)')
     parser.add_argument('--profile', type=str, default='false', help='collect metrics once, and print profiling stats')
@@ -267,23 +275,22 @@ def main():
     parser.add_argument('--qm-rand', type=int, default=60, help='randomize qm monitor cache expiry')
     parser.add_argument('--qm-monitor-defer-close', type=str, default="true", help='defer and retry closing unresponsive qm monitor sessions')
 
-    args = parser.parse_args()
-    global cli_args
-    cli_args = args
+    # hack to access cli_args across modules
+    builtins.cli_args = parser.parse_args()
 
-    loglevel = getattr(logging, args.loglevel.upper(), None)
+    loglevel = getattr(logging, cli_args.loglevel.upper(), None)
     if not isinstance(loglevel, int):
-        raise ValueError(f'Invalid log level: {args.loglevel}')
+        raise ValueError(f'Invalid log level: {cli_args.loglevel}')
     logging.basicConfig(level=loglevel,format='%(asctime)s: %(message)s')
 
     global prefix
-    prefix = args.metrics_prefix
-    pvecommon.global_qm_timeout = args.qm_terminal_timeout
-    pvecommon.qm_max_ttl = args.qm_max_ttl
-    pvecommon.qm_rand = args.qm_rand
-    pvecommon.qm_monitor_defer_close = args.qm_monitor_defer_close
+    prefix = cli_args.metrics_prefix
+    pvecommon.global_qm_timeout = cli_args.qm_terminal_timeout
+    pvecommon.qm_max_ttl = cli_args.qm_max_ttl
+    pvecommon.qm_rand = cli_args.qm_rand
+    pvecommon.qm_monitor_defer_close = cli_args.qm_monitor_defer_close
 
-    if args.profile.lower() == 'true':
+    if cli_args.profile.lower() == 'true':
         profiler = cProfile.Profile()
         profiler.enable()
         collect_kvm_metrics()
@@ -292,7 +299,7 @@ def main():
         return
     else:
         REGISTRY.register(PVECollector())
-        start_http_server(args.port)
+        start_http_server(cli_args.port)
 
     while True:
         time.sleep(100)
