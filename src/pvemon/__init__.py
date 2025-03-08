@@ -24,6 +24,13 @@ import qmblock
 
 import builtins
 
+# Cache for pool data
+pool_cache = {
+    'last_mtime': 0,
+    'vm_pool_map': {},
+    'pools': {}
+}
+
 DEFAULT_PORT = 9116
 DEFAULT_INTERVAL = 10
 DEFAULT_PREFIX = "pve"
@@ -135,6 +142,67 @@ def read_interface_stats(ifname):
         pass
     return stats
 
+def get_pool_info():
+    """
+    Read pool information from /etc/pve/user.cfg, caching based on file modification time.
+    Returns a tuple of (vm_to_pool_map, pool_info) where:
+    - vm_to_pool_map maps VM IDs to their pool names
+    - pool_info contains details about each pool (levels, etc.)
+    """
+    pool_cfg_path = '/etc/pve/user.cfg'
+
+    try:
+        # Check modification time
+        current_mtime = os.path.getmtime(pool_cfg_path)
+
+        # If file hasn't changed, return cached data
+        if current_mtime <= pool_cache['last_mtime'] and pool_cache['vm_pool_map']:
+            return pool_cache['vm_pool_map'], pool_cache['pools']
+
+        # File has changed or first run, parse it
+        logging.debug(f"Reading pool configuration from {pool_cfg_path}")
+
+        vm_pool_map = {}
+        pools = {}
+
+        with open(pool_cfg_path, 'r') as f:
+            for line in f:
+                if line.startswith('pool:'):
+                    parts = line.strip().split(':')
+                    if len(parts) < 3:
+                        continue
+
+                    pool_name = parts[1]
+                    vm_list = parts[3] if len(parts) > 3 else ''
+
+                    # Store pool info
+                    pool_parts = pool_name.split('/')
+                    pool_level_count = len(pool_parts)
+
+                    pools[pool_name] = {
+                        'level_count': pool_level_count,
+                        'level1': pool_parts[0] if pool_level_count > 0 else '',
+                        'level2': pool_parts[1] if pool_level_count > 1 else '',
+                        'level3': pool_parts[2] if pool_level_count > 2 else ''
+                    }
+
+                    # Map VMs to this pool
+                    if vm_list:
+                        for vm_id in vm_list.split(','):
+                            if vm_id.strip():
+                                vm_pool_map[vm_id.strip()] = pool_name
+
+        # Update cache
+        pool_cache['last_mtime'] = current_mtime
+        pool_cache['vm_pool_map'] = vm_pool_map
+        pool_cache['pools'] = pools
+
+        return vm_pool_map, pools
+
+    except (FileNotFoundError, PermissionError) as e:
+        logging.warning(f"Could not read pool configuration: {e}")
+        return {}, {}
+
 def collect_kvm_metrics():
     logging.debug("collect_kvm_metrics() called")
     gauge_dict = {}
@@ -170,13 +238,34 @@ def collect_kvm_metrics():
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
 
-    # Try to find ID to pool mapping here
+    # Get VM to pool mapping
+    vm_pool_map, pools = get_pool_info()
 
     for proc, cmdline, id in procs:
         # Extract vm labels from cmdline
         info_label_dict = {get_label_name(l): flag_to_label_value(cmdline,l) for l in label_flags}
-        info_label_dict['pid']=str(proc.pid)
+        info_label_dict['pid'] = str(proc.pid)
         logging.debug(f"got PID: {proc.pid}")
+
+        # Add pool information if available
+        if id in vm_pool_map:
+            pool_name = vm_pool_map[id]
+            pool_info = pools[pool_name]
+
+            info_label_dict['pool'] = pool_name
+            info_label_dict['pool_levels'] = str(pool_info['level_count'])
+            info_label_dict['pool1'] = pool_info['level1']
+            info_label_dict['pool2'] = pool_info['level2']
+            info_label_dict['pool3'] = pool_info['level3']
+            logging.debug(f"VM {id} belongs to pool {pool_name}")
+        else:
+            # VM not in any pool
+            info_label_dict['pool'] = ''
+            info_label_dict['pool_levels'] = '0'
+            info_label_dict['pool1'] = ''
+            info_label_dict['pool2'] = ''
+            info_label_dict['pool3'] = ''
+
         info_dict["kvm"].add_metric([], info_label_dict)
 
         d = {
