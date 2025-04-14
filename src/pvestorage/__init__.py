@@ -65,9 +65,15 @@ def parse_storage_cfg(file_path='/etc/pve/storage.cfg'):
             else:
                 # Parse key-value pairs within the current storage
                 if current_storage:
-                    key, value = line.split(None, 1)
-                    sanitized_key = sanitize_key(key.strip())
-                    current_storage[sanitized_key] = value.strip()
+                    parts = line.split(None, 1)
+                    key = parts[0].strip()
+                    sanitized_key = sanitize_key(key)
+                    if len(parts) > 1:
+                        # Regular key-value pair
+                        current_storage[sanitized_key] = parts[1].strip()
+                    else:
+                        # Key with no value, set it to True
+                        current_storage[sanitized_key] = True
 
     # Append the last storage section to the list if any
     if current_storage:
