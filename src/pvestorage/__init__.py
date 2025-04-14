@@ -126,7 +126,12 @@ def collect_storage_metrics():
 
     storage_pools = parse_storage_cfg()
     for storage in storage_pools:
-        info_dict["node_storage"].add_metric([], storage)
+        # Convert any non-string values to strings for InfoMetricFamily
+        storage_info = {}
+        for key, value in storage.items():
+            storage_info[key] = str(value) if not isinstance(value, str) else value
+
+        info_dict["node_storage"].add_metric([], storage_info)
         size = get_storage_size(storage)
         if size != None:
             gauge_dict["node_storage_size"].add_metric([storage["name"], storage["type"]], size["total"])
