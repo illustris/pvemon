@@ -87,15 +87,53 @@ def parse_storage_cfg(file_path='/etc/pve/storage.cfg'):
 
 def get_storage_size(storage):
     try:
-        if storage["type"] in ["dir", "nfs", "cephfs", "zfspool"]:
-            if storage["type"] == "zfspool":
-                path = storage["mountpoint"]
-            else:
-                path = storage["path"]
-            # Get filesystem statistics
+        if storage["type"] == "zfspool":
+            if "pool" not in storage:
+                logging.debug(f"ZFS pool {storage['name']} has no pool name configured")
+                return None
+
+            # Extract the pool name (could be in format like rpool/data)
+            pool_name = storage["pool"].split("/")[0]
+
+            # Use zpool command to get accurate size information
+            import subprocess
+            try:
+                result = subprocess.run(
+                    ["zpool", "list", pool_name, "-p"],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+
+                # Parse the output
+                lines = result.stdout.strip().split("\n")
+                if len(lines) < 2:
+                    logging.warn(f"Unexpected zpool list output format for {pool_name}")
+                    return None
+
+                # Extract values from the second line (the data line)
+                values = lines[1].split()
+                if len(values) < 4:
+                    logging.warn(f"Insufficient data in zpool list output for {pool_name}")
+                    return None
+
+                # Values are: NAME SIZE ALLOC FREE ...
+                # We need the SIZE and FREE values (index 1 and 3)
+                total_size = int(values[1])
+                free_space = int(values[3])
+
+                return {
+                    "total": total_size,
+                    "free": free_space
+                }
+            except (subprocess.SubprocessError, ValueError, IndexError) as e:
+                logging.warn(f"Error running zpool list for {pool_name}: {e}")
+                return None
+
+        elif storage["type"] in ["dir", "nfs", "cephfs"]:
+            # For non-ZFS storage, use statvfs
+            path = storage["path"]
             stats = os.statvfs(path)
-            # Calculate total size and free space in bytes
-            # TODO: find an alternative way to calculate total_size for ZFS
             total_size = stats.f_frsize * stats.f_blocks
             free_space = stats.f_frsize * stats.f_bavail
             return {
