@@ -34,6 +34,7 @@ pool_cache = {
 DEFAULT_PORT = 9116
 DEFAULT_INTERVAL = 10
 DEFAULT_PREFIX = "pve"
+DEFAULT_HOST = "0.0.0.0"
 
 gauge_settings = [
     ('kvm_cpu', 'CPU time for VM', ['id', 'mode']),
@@ -353,6 +354,7 @@ class PVECollector(object):
 def main():
     parser = argparse.ArgumentParser(description='PVE metrics exporter for Prometheus')
     parser.add_argument('--port', type=int, default=DEFAULT_PORT, help='Port for the exporter to listen on')
+    parser.add_argument('--host', type=str, default=DEFAULT_HOST, help='Host address to bind the exporter to')
     parser.add_argument('--interval', type=int, default=DEFAULT_INTERVAL, help='THIS OPTION DOES NOTHING')
     parser.add_argument('--collect-running-vms', type=str, default='true', help='Enable or disable collecting running VMs metric (true/false)')
     parser.add_argument('--collect-storage', type=str, default='true', help='Enable or disable collecting storage info (true/false)')
@@ -388,7 +390,7 @@ def main():
         return
     else:
         REGISTRY.register(PVECollector())
-        start_http_server(cli_args.port)
+        start_http_server(cli_args.port, addr=cli_args.host)
 
     while True:
         time.sleep(100)
